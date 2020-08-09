@@ -1,2 +1,2 @@
 # Handler_JSON
-JSON Python handler for generla/AVL specific usage
+JSON Python handler for general/AVL specific usage
