@@ -156,17 +156,21 @@ def IBase_update_dict_by_path(mainDict, listKey, tarValue, flg_mode):
 	listFound = IBase_validate_dict_key_exist(dictRes, listKey, 1)
 
 	#--- Create target dictionary to be merged from the rest that weren't found --------------------
-	for idx_pos in range(len(listKey) - 1, -1, -1):
+	for idx_pos in range(len(listKey) - 1, 0, -1):
 		thisKey = listKey[idx_pos]
 
 		if not thisKey in listFound:
 			if tarDict == {}: tarDict[thisKey] = tarValue
-			else: tarDict[thisKey] = tarDict
+			else:
+				tmpDict = tarDict.copy()
+				tarDict = {}
+				tarDict[thisKey] = tmpDict
 	if tarDict == {}: tarDict = tarValue
 
 	#--- WorkMode ----------------------------------------------------------------------------------
-	tmpDictValue = [listFound[0]]
-	tmpDict 	 = dictRes.copy()
+	if len(listFound) > 0: tmpDictValue = [listFound[0]]
+	else: tmpDictValue = [listKey[0], tarDict]
+	tmpDict = dictRes.copy()
 
 	# Fetch dictionary value on each level to 'tmpDictValue'
 	for idx, key in enumerate(listFound):
@@ -180,9 +184,10 @@ def IBase_update_dict_by_path(mainDict, listKey, tarValue, flg_mode):
 		flg_set_val = False
 
 		if len(listFound) < len(listKey):
-			curValue = tmpDictValue[len(tmpDictValue) - 1]
-			curValue.update(tarDict)
-			tmpDictValue[len(tmpDictValue) - 1] = curValue
+			if len(listFound) > 0:
+				curValue = tmpDictValue[len(tmpDictValue) - 1]
+				curValue.update(tarDict)
+				tmpDictValue[len(tmpDictValue) - 1] = curValue
 			flg_set_val  = True
 			idx_start	 = idx_start - 1
 
@@ -311,7 +316,7 @@ def IBase_transform_list_to_dict(listData, flg_allstring, flg_case):
 	listKey    = listData[0]
 	listVal    = listData[1]
 	listPrep   = [[], []]
-	dictResult = {}
+	dictRes    = {}
 
 	#*** Operations ********************************************************************************
 	#--- Post-Validation ---------------------------------------------------------------------------
@@ -336,9 +341,18 @@ def IBase_transform_list_to_dict(listData, flg_allstring, flg_case):
 	for idx in range(0, len(listPrep[0])):
 		thisKey = listPrep[0][idx].split(".")
 		thisVal = listPrep[1][idx]
-		
+
+		if isinstance(thisVal, list) and len(thisVal) == 1: thisVal = thisVal[0]
+
+		thisKey.append(thisVal)
+		dictParam = hs_create_dict_from_serial_list(thisKey)
+		curDict   = {}
+		curDict[dictParam[0]] = dictParam[1]
+		curKeys   = IBase_get_keylist_of_dict_single_path(curDict)
+		dictRes   = IBase_update_dict_by_path(dictRes, curKeys[0], curKeys[1], 1)
+
 	#--- Release -----------------------------------------------------------------------------------
-	return dictResult
+	return dictRes
 
 def IBase_transform_dict_to_list(dictData):
 	print("TODO")
@@ -390,21 +404,15 @@ def IUser_transform_dataset_to_json(listData, flg_allstring, flg_case):
 
 
 # Debuging Area
-listKey = ["nameFlowstream", "nameFlowstream", "ecs.devicename", "ecs.activate", \
- 			"gmd.devicename", "gmd.activate", "gmd.table.delaytime", "gmd.table.range", \
- 			"gmd.devicename", "gmd.activate", "gmd.table.delaytime", "gmd.table.range"]
+listKey = ["nameFlowstream", "ecs.devicename", "ecs.activate", \
+ 			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range", \
+ 			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range"]
 
-listVal = ["B: Gas SULEV/Bag", "TestDouble", "CVS", "Yes", \
- 			"SULEV", "Yes", "no_delay", "Modal", \
- 			"CONTBAG", "Yes", "Modal", "Modal;Bag"]
+listVal = ["B: Gas SULEV/Bag", "CVS", "Yes", \
+ 			"SULEV", "Yes", "Bag", "no_delay", "Modal", \
+ 			"CONTBAG", "Yes", "Diluted;Bag", "Modal", "Modal;Bag"]
 
 listParam = [listKey, listVal]
 
-#RetVal = IUser_transform_dataset_to_json(listParam, False, 0)
-#print(RetVal)
-
-dict1 = {"Engineer": {"Name": ["Ford_BBS", "Daniel"]}}
-dict2 = {"Engineer": {"Name": "Patrick"}}
-dict3 = {"Engineer": {"Skills": "iGEM"}}
-dict4 = {"Engineer": {"Skills": "PUMA"}}
-print(IBase_merge_dict_single_path({}, [dict1, dict2, dict3, dict4]))
+RetVal = IUser_transform_dataset_to_json(listParam, False, 0)
+print(RetVal)
