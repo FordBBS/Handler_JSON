@@ -9,7 +9,7 @@
 # 					- Implemented Data Manipulation, Importing, Exporting function groups
 # 2020/08/09, BBS: 	- Implemented following functions completely
 # 						'IBase_update_dict_by_path', 'IBase_merge_dict_single_path', 
-# 						'IBase_get_keylist_of_dict_single_path'
+# 						'IBase_get_keylist_of_dict_single_path', 'IBase_transform_dict_group_based'
 #
 #***************************************************************************************************
 
@@ -29,6 +29,9 @@ import  json
 #--- BBS Modules -----------------------------------------------------------------------------------
 import  sys
 sys.path.append(r"C:\Backup\03 SelfMade_Tools\Python\BBS_Modules")
+
+# OS handler
+import 	os_handler 			as hs_os
 
 # Dataset handler
 import  dataset_handler 	as hs_dataset
@@ -92,7 +95,49 @@ def IUser_read_json(pathFile):
 
 
 #*** Function Group: Exporting *********************************************************************
+def IUser_write_json(objJson, pathDest, nameFile, flg_tryremove, flg_timestamp):
+	#*** Documentation *****************************************************************************
+	'''Documentation 
 
+		Create a json file of 'objJson' content at 'pathDest' directory with 'nameFile' as a filename
+		If there is already an existence file, renaming mechanism will be done automatically based
+		on 'flg_tryremove' and 'flg_timestamp' parameters
+
+	[str]  objJson,  JSON content
+	[str]  pathDest, Target destination where this json file shall be located at
+					 Desktop's directory is used as a default
+	[str]  nameFile, Target filename, "json_" + timestamp is used as a default
+	[bool] flg_tryremove, True: Try to delete existing file first, False: Not try
+	[bool] flg_timestamp, True: Use timestamp first after found same 'nameFile', False: Apply counter
+							immediately
+
+	'''
+
+	#*** Input Validation **************************************************************************
+	if not isinstance(objJson, str): return False
+
+	#*** Initialization ****************************************************************************
+	chr_path     = hs_os.getconst_chr_path()[1]
+	strTimestamp = hs_os.IBase_get_timestamp("yyyymmdd_hhmmss")
+	pathDefault  = hs_os.IBase_get_desktop_path()
+	nameDefault  = "json_" + strTimestamp
+
+	#*** Operations ********************************************************************************
+	#--- Preparation: Destination ------------------------------------------------------------------
+	if not (isinstance(pathDest, str) and len(pathDest) > 0): pathDest = pathDefault
+	if not os.path.exists(pathDest): pathDest = os.path.split(pathDest)[0] + chr_path \
+	 											+ IUser_create_folder(pathDest, "", False, True)
+
+	#--- Preparation: Filename ---------------------------------------------------------------------
+	if not (isinstance(nameFile, str) and len(nameFile) > 0): nameFile = nameDefault
+
+	#--- Create JSON file --------------------------------------------------------------------------
+	RetVal = hs_os.IUser_create_file_fromstr(nameFile, pathDest, objJson, ".json", \
+												flg_tryremove, flg_tryremove)
+
+	#--- Release -----------------------------------------------------------------------------------
+	if isinstance(RetVal, str): return True
+	else: return False
 
 
 
@@ -290,6 +335,33 @@ def IBase_merge_dict_single_path(mainDict, listDict):
 	#--- Release -----------------------------------------------------------------------------------
 	return dictRes
 
+def IBase_transform_dict_group_based(mainDict):
+	#*** Documentation *****************************************************************************
+	'''Documentation 
+
+		Transform 'mainDict' dictionary into EMA Device-Based format dictionary
+		The different is all array shall be regrouped into a device-based
+
+		Example, Normal: {"gmd": {"devicename": ["SULEV", "CONTBAG"]}
+				 EMA: 	 {"gmd": [{"devicename": "SULEV"}, {"devicename": "CONTBAG"}]} 
+
+	[dict] mainDict, Main dictionary
+
+	'''
+
+	#*** Input Validation **************************************************************************
+	if not isinstance(mainDict, dict): return mainDict
+
+	#*** Initialization ****************************************************************************
+	refDict = mainDict.copy()
+	resDict = {}
+
+	#*** Operations ********************************************************************************
+
+
+	#--- Release -----------------------------------------------------------------------------------
+	return resDict
+
 def IBase_transform_list_to_dict(listData, flg_allstring, flg_case):
 	#*** Documentation *****************************************************************************
 	'''Documentation 
@@ -374,7 +446,7 @@ def IBase_transform_dict_to_json(dictData):
 	# Nothing to be initialized
 
 	#*** Operations ********************************************************************************
-	return json.dumps(dictData)
+	return json.dumps(dictData, indent= 4)
 
 def IUser_transform_dataset_to_json(listData, flg_allstring, flg_case):
 	#*** Documentation *****************************************************************************
@@ -398,7 +470,10 @@ def IUser_transform_dataset_to_json(listData, flg_allstring, flg_case):
 	#--- Transform 'listData' into Python dictionary object ----------------------------------------
 	RetVal = IBase_transform_list_to_dict(listData, flg_allstring, flg_case)
 
-	#--- Transform Python dictionary object to JSON ------------------------------------------------
+	#--- Re-arrange 'RetVal' dictionary to a EMA device-based format -------------------------------
+	#RetVal = IBase_transform_dict_group_based(RetVal)
+
+	#--- Release -----------------------------------------------------------------------------------
 	return IBase_transform_dict_to_json(RetVal)
 
 
@@ -414,5 +489,4 @@ listVal = ["B: Gas SULEV/Bag", "CVS", "Yes", \
 
 listParam = [listKey, listVal]
 
-RetVal = IUser_transform_dataset_to_json(listParam, False, 0)
-print(RetVal)
+#RetVal = IUser_transform_dataset_to_json(listParam, False, 0)
