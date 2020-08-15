@@ -1,6 +1,7 @@
 ####################################################################################################
 #                                                                                                  #
 # Python, JSON handler, BBS					   						                               #
+# GitHub: https://github.com/FordBBS/Handler_JSON 											       #
 #                                                                                                  #
 ####################################################################################################
 
@@ -9,7 +10,9 @@
 # 					- Implemented Data Manipulation, Importing, Exporting function groups
 # 2020/08/09, BBS: 	- Implemented following functions completely
 # 						'IBase_update_dict_by_path', 'IBase_merge_dict_single_path', 
-# 						'IBase_get_keylist_of_dict_single_path', 'IBase_transform_dict_group_based'
+# 						'IBase_get_keylist_of_dict_single_path'
+# 2020/08/xx, BBS:	- Cplt Issue #2; 'IBase_format_json_ema_devicebased'
+# 					- Implemented 'IBase_transform_dict_to_list'
 #
 #***************************************************************************************************
 
@@ -335,32 +338,39 @@ def IBase_merge_dict_single_path(mainDict, listDict):
 	#--- Release -----------------------------------------------------------------------------------
 	return dictRes
 
-def IBase_transform_dict_group_based(mainDict):
+def IBase_format_json_ema_devicebased(dictData):
 	#*** Documentation *****************************************************************************
 	'''Documentation 
 
-		Transform 'mainDict' dictionary into EMA Device-Based format dictionary
-		The different is all array shall be regrouped into a device-based
+		Format 'dictData' to Device-Based dictionary (for EMA usage)
+		It's expected that the size of each array should be same on each parameter since it's the
+		size of arrays represent the amount of device (None of parameter should have different size)
 
-		Example, Normal: {"gmd": {"devicename": ["SULEV", "CONTBAG"]}
-				 EMA: 	 {"gmd": [{"devicename": "SULEV"}, {"devicename": "CONTBAG"}]} 
+		e.g. Normal JSON:	'gmd': {'devicename': ['SULEV', 'CONTBAG'], 'activate': ['Yes', 'Yes']
+			 EMA JSON: 	 	'gmd': [{'devicename': 'SULEV', 'activate': 'Yes'}, \
+			  						{'devicename':'CONTBAG', 'activate': 'Yes'}]
 
-	[dict] mainDict, Main dictionary
+	[dict] dictData, Target Dictionary to be formatted
 
 	'''
 
 	#*** Input Validation **************************************************************************
-	if not isinstance(mainDict, dict): return mainDict
+	if not isinstance(dictData, dict): return dictData
 
 	#*** Initialization ****************************************************************************
-	refDict = mainDict.copy()
-	resDict = {}
+	dictRes = {}
 
 	#*** Operations ********************************************************************************
+	for mainKey in dictData:
+		if not isinstance(dictData[mainKey], dict): dictRes[mainKey] = dictData[mainKey]
+		else:
+			dictRes[mainKey] = ""
+			flg_array 		 = 0 		# 0: Init, 1: Done, No Array, 2: Done, Array is found 
+
 
 
 	#--- Release -----------------------------------------------------------------------------------
-	return resDict
+	return dictRes
 
 def IBase_transform_list_to_dict(listData, flg_allstring, flg_case):
 	#*** Documentation *****************************************************************************
@@ -427,7 +437,67 @@ def IBase_transform_list_to_dict(listData, flg_allstring, flg_case):
 	return dictRes
 
 def IBase_transform_dict_to_list(dictData):
-	print("TODO")
+	#*** Documentation *****************************************************************************
+	'''Documentation 
+
+		Transform Python dictionary object to Python Parameter-Value list
+
+	[list] dictData, Target Python dictionary object
+
+	'''
+
+	#*** Input Validation **************************************************************************
+	# Nothing to be pre-validated
+
+	#*** Initialization ****************************************************************************
+	listVal = [] 		# [dictInfoLvl0, dictInfoLvl1, ....], dictInfoLvlX = [listParam, listValue]
+
+	#*** Operations ********************************************************************************
+	#--- Post-Validation ---------------------------------------------------------------------------
+	if not isinstance(dictData, dict): return listRes
+
+	#--- Transform target dictionary ---------------------------------------------------------------
+	dictPrev = dictData.copy()
+	cnt_col  = 0
+	flg_work = True
+
+	while flg_work:
+		#--- Init current level --------------------------------------------------------------------
+		cnt_dict = 0
+
+		#--- Collect current level information -----------------------------------------------------
+		listVal.append([[], []])
+
+		# Case: reference info is a dict
+		if isinstance(dictPrev, dict):
+			for key in dictPrev:
+				itsValue = dictPrev[key]
+				listVal[cnt_col][0].append(key)
+				listVal[cnt_col][1].append(itsValue)
+				if isinstance(itsValue, dict): cnt_dict = cnt_dict + 1
+
+		# Case: refernece info is a List of Parameter-Value
+		else:
+			for idx, eachParam in enumerate(dictPrev[0]):
+				itsValue = dictPrev[1][idx]
+				
+				if not isinstance(itsValue, dict):
+					listVal[cnt_col][0].append(eachParam)
+					listVal[cnt_col][1].append(itsValue)
+				else:
+					for key in itsValue:
+						listVal[cnt_col][0].append(eachParam + "." + key)
+						listVal[cnt_col][1].append(itsValue[key])
+						if isinstance(itsValue, dict): cnt_dict = cnt_dict + 1
+
+		#--- Release current level -----------------------------------------------------------------
+		if cnt_dict == 0: flg_work = False
+		else:
+			dictPrev = listVal[cnt_col]
+			cnt_col += 1
+
+	#--- Release -----------------------------------------------------------------------------------
+	return listVal[len(listVal) - 1]
 
 def IBase_transform_dict_to_json(dictData):
 	#*** Documentation *****************************************************************************
@@ -470,8 +540,8 @@ def IUser_transform_dataset_to_json(listData, flg_allstring, flg_case):
 	#--- Transform 'listData' into Python dictionary object ----------------------------------------
 	RetVal = IBase_transform_list_to_dict(listData, flg_allstring, flg_case)
 
-	#--- Re-arrange 'RetVal' dictionary to a EMA device-based format -------------------------------
-	#RetVal = IBase_transform_dict_group_based(RetVal)
+	#--- Transform final dictionary to Device-Based format -----------------------------------------
+	#RetVal = IBase_format_json_ema_devicebased(RetVal)
 
 	#--- Release -----------------------------------------------------------------------------------
 	return IBase_transform_dict_to_json(RetVal)
@@ -489,4 +559,5 @@ listVal = ["B: Gas SULEV/Bag", "CVS", "Yes", \
 
 listParam = [listKey, listVal]
 
-#RetVal = IUser_transform_dataset_to_json(listParam, False, 0)
+RetVal = IUser_transform_dataset_to_json(listParam, False, 0)
+
