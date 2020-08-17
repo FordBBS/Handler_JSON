@@ -364,10 +364,9 @@ def IBase_manipulate_dicts_target_key(dictA, dictB, strKey, flg_mode):
 			if isinstance(valDictB, list): resVal.extend(valDictB)
 			else: resVal.append(valDictB)
 			
-	if isinstance(resVal, list): resVal = bbs_remove_dupl(resVal, True)
+	if isinstance(resVal, list) and len(resVal) == 1: resVal = resVal[0]
 	tmpList = strKey.split(chr_join)
 	tmpList.append(resVal)
-
 	resVal  = hs_create_dict_from_serial_list(tmpList)[1]
 
 	#--- Release -----------------------------------------------------------------------------------
@@ -413,7 +412,7 @@ def IBase_operation_union_dicts(listDict):
 				listTmpVal = []
 				
 				for idx, eachVal in enumerate(listRes[1]):
-					if listRes[0][idx] == thisMainKey: listTmpVal.append(listRes[1][idx])
+					if listRes[0][idx] == thisMainKey: listTmpVal.append(eachVal)
 
 				if len(listTmpVal) == 1: listPrepVal.append(listTmpVal[0])
 				elif len(listTmpVal) > 1:
@@ -432,6 +431,7 @@ def IBase_operation_union_dicts(listDict):
 									arr_idx += 1
 								combVal[arr_idx] = IBase_operation_union_dicts([combVal[arr_idx], tarDict])
 
+
 					if len(combVal) == 1: combVal = combVal[0]
 					listPrepVal.append(combVal)
 
@@ -447,7 +447,7 @@ def IBase_transform_list_to_dict(listData):
 
 		Transform formatted 'listData' List into Python dictionary object
 
-	[list] listData, 	  Target formatted Parameter-Value list to be transformed to dictionary
+	[list] listData, Target formatted Parameter-Value list to be transformed to dictionary
 
 	'''
 
@@ -477,12 +477,8 @@ def IBase_transform_list_to_dict(listData):
 			tmpInfo = hs_create_dict_from_serial_list(tmpKeys)
 			tmpDict[tmpInfo[0]] = tmpInfo[1]
 			listCurDicts.append(tmpDict)
-
-		print("---------------------------------")
-		print(listCurDicts)
 		dictRes = IBase_operation_union_dicts(listCurDicts)
-		print("Result is ...")
-		print(dictRes)
+
 
 	#--- Release -----------------------------------------------------------------------------------
 	return dictRes
@@ -561,7 +557,7 @@ def IBase_transform_dict_to_list(dictData):
 		if cnt_dict == 0: flg_work = False
 
 	#--- Release -----------------------------------------------------------------------------------
-	return listVal[len(listVal) - 1]
+	return hs_get_formatted_listpair(listVal[len(listVal) - 1], False, 0)
 
 def IBase_transform_dict_to_json(dictData):
 	#*** Documentation *****************************************************************************
@@ -605,25 +601,20 @@ def IUser_transform_dataset_to_json(listData, flg_allstring, flg_case):
 	listData = hs_get_formatted_listpair(listData, flg_allstring, flg_case)
 
 	#--- Transform 'listData' into Python dictionary object ----------------------------------------
-	RetVal = IBase_transform_list_to_dict(listData)
+	dictData = IBase_transform_list_to_dict(listData)
 
 	#--- Release -----------------------------------------------------------------------------------
-	return IBase_transform_dict_to_json(RetVal)
+	return IBase_transform_dict_to_json(dictData)
 
 
 
 # Debuging Area
 listKey = ["nameFlowstream", "ecs.devicename", "ecs.activate", \
  			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range", \
- 			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range", \
  			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range"]
 
 listVal = ["B: Gas SULEV/Bag", "CVS", "Yes", \
- 			"SULEV", "Yes", "Bag", "no_delay", "Modal", \
- 			"CONT_BAG", "Yes", "Diluted;Bag", "delay_comm", "Modal;Bag", \
- 			"CONT_BAG_THC", "Yes", "Diluted;Bag", "delay_comm1", "OnlyTHC"]
+ 			"SULEV", "Yes", "Bag", "no_delay", "Autorange", \
+ 			"CONT_BAG_THC", "Yes", "Diluted;Bag", "delay_comm", "OnlyTHC"]
 
 listParam = [listKey, listVal]
-
-RetVal = IUser_transform_dataset_to_json(listParam, False, 0)
-print(RetVal)
