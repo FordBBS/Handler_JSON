@@ -11,8 +11,14 @@
 # 2020/08/09, BBS: 	- Implemented following functions completely
 # 						'IBase_update_dict_by_path', 'IBase_merge_dict_single_path', 
 # 						'IBase_get_keylist_of_dict_single_path'
-# 2020/08/xx, BBS:	- Cplt Issue #2; 'IBase_format_json_ema_devicebased'
+# 2020/08/16, BBS:	- Cplt Issue #2, #4
+# 					- Improve 'hs_create_dict_from_serial_list' for array result
+# 					- Improve 'IBase_validate_dict_key_exist'
+# 					- Implemented 'hs_get_formatted_listpair'
 # 					- Implemented 'IBase_transform_dict_to_list'
+# 					- Implemented 'IBase_manipulate_dicts_target_key'
+# 					- Implemented 'IBase_operation_union_dicts'
+# 					- Remove 'IBase_update_dict_by_path', 'IBase_merge_dict_single_path'
 #
 #***************************************************************************************************
 
@@ -38,10 +44,16 @@ import 	os_handler 			as hs_os
 
 # Dataset handler
 import  dataset_handler 	as hs_dataset
+from    dataset_handler  	import IBase_get_reduced_list			as bbs_reduce
+from 	dataset_handler 	import IBase_list_remove_duplicate  	as bbs_remove_dupl
 
 
 
 #*** Function Group: Helper ************************************************************************
+def getconst_join_character():
+	RetVal = "."
+	return RetVal
+
 def hs_create_dict_from_serial_list(listInput):
 	#*** Input-Validation **************************************************************************
 	if not isinstance(listInput, list): return {}
@@ -54,21 +66,76 @@ def hs_create_dict_from_serial_list(listInput):
 	#*** Operations ********************************************************************************
 	#--- Case: more than 2 elements ----------------------------------------------------------------
 	if len(listInput) > 2:
-		tmpDict = {}
-		tmpDict[listInput[-2]] = thisVal
+		listPrepVal = []
 
-		for idx in range(len(listInput) - 3, 0, -1):
-			curKey  = listInput[idx]
-			curDict = tmpDict.copy()
+		if not isinstance(thisVal, list): thisVal = [thisVal]
+		for eachVal in thisVal:
 			tmpDict = {}
-			tmpDict[curKey] = curDict
-		listRes = [mainKey, tmpDict]
+			tmpDict[listInput[-2]] = eachVal
+
+			for idx in range(len(listInput) - 3, 0, -1):
+				curKey  = listInput[idx]
+				curDict = tmpDict.copy()
+				tmpDict = {}
+				tmpDict[curKey] = curDict
+			listPrepVal.append(tmpDict)
+
+		if len(listPrepVal) == 1: listPrepVal = listPrepVal[0]
+		listRes = [mainKey, listPrepVal]
 
 	#--- Case: only 2 elements ---------------------------------------------------------------------
 	else: listRes = [mainKey, thisVal]
 
 	#--- Release -----------------------------------------------------------------------------------
 	return listRes
+
+def hs_get_formatted_listpair(listPair, flg_allstring, flg_case):
+	#*** Documentation *****************************************************************************
+	'''Documentation 
+
+		Return a formatted Parameter-Value list for further work in this module
+
+	[list] listPair, 	  Target Parameter-Value list to be formatted
+	[bool] flg_allstring, True: Convert all values into String, False: no conversion
+	[int]  flg_case,  	  0: Do nothing, 1: Convert all string to upper case, 2: ... to lower case
+
+	'''
+
+	#*** Input Validation **************************************************************************
+	if not (isinstance(listPair, list) and len(listPair) >= 2): return [[], []]
+
+	#*** Initialization ****************************************************************************
+	if isinstance(flg_allstring, int):
+		if flg_allstring != 0: flg_allstring = True
+		else: flg_allstring = False
+	
+	if not isinstance(flg_allstring, bool): flg_allstring = False
+	if not (isinstance(flg_case, int) and flg_case in range(0, 3)): flg_case = 0
+
+	listParam = listPair[0]
+	listValue = listPair[1]
+	listPrep = [[], []]
+
+	#*** Operations ********************************************************************************
+	for eachKey in listParam:
+		if not eachKey in listPrep[0]:
+			idx = 0
+			listPrep[0].append(eachKey)
+			listPrep[1].append([])
+
+			while idx >= 0:
+				try:
+					idx 	= listParam.index(eachKey, idx)
+					eachVal = listValue[idx]
+
+					if flg_allstring: eachVal = str(eachVal)
+					if flg_case == 1: eachVal = eachVal.upper()
+					elif flg_case == 2: eachVal = eachVal.lower()
+
+					listPrep[1][len(listPrep[1]) - 1].append(eachVal)
+					idx += 1
+				except: idx = -1
+	return listPrep
 
 
 
@@ -173,214 +240,214 @@ def IBase_get_keylist_of_dict_single_path(mainDict):
 			if not isinstance(dictRes, dict): return [listRes, dictRes]
 			break
 
-def IBase_update_dict_by_path(mainDict, listKey, tarValue, flg_mode):
+def IBase_validate_dict_key_exist(mainDict, tarDict):
 	#*** Documentation *****************************************************************************
 	'''Documentation 
 
-		Update 'mainDict' on requested path, breakdown element in 'listKey', by 'tarValue'
-
-	[dict] mainDict, Main dictionary
-	[list] listKey,  List of keys to be used as a path guideline
-	[any]  tarValue, Target value to be updated
-	[int]  flg_mode, 0: Change, 1: Append, 2: Remove
-
-	'''
-
-	#*** Input Validation **************************************************************************
-	if not isinstance(mainDict, dict): return mainDict
-	if not (isinstance(listKey, list) or isinstance(listKey, str)) or len(listKey) == 0:
-		return mainDict
-
-	#*** Initialization ****************************************************************************
-	if not (isinstance(flg_mode, int) and flg_mode in range(0, 3)): flg_mode = 0
-
-	listKey   = hs_dataset.hs_prep_StrList(listKey)
-	dictRes   = mainDict.copy()
-	tarDict   = {}
-	listFound = []
-
-	#*** Operations ********************************************************************************
-	#--- Get a list of available key ---------------------------------------------------------------
-	listFound = IBase_validate_dict_key_exist(dictRes, listKey, 1)
-
-	#--- Create target dictionary to be merged from the rest that weren't found --------------------
-	for idx_pos in range(len(listKey) - 1, 0, -1):
-		thisKey = listKey[idx_pos]
-
-		if not thisKey in listFound:
-			if tarDict == {}: tarDict[thisKey] = tarValue
-			else:
-				tmpDict = tarDict.copy()
-				tarDict = {}
-				tarDict[thisKey] = tmpDict
-	if tarDict == {}: tarDict = tarValue
-
-	#--- WorkMode ----------------------------------------------------------------------------------
-	if len(listFound) > 0: tmpDictValue = [listFound[0]]
-	else: tmpDictValue = [listKey[0], tarDict]
-	tmpDict = dictRes.copy()
-
-	# Fetch dictionary value on each level to 'tmpDictValue'
-	for idx, key in enumerate(listFound):
-		tmpDict = tmpDict[key]
-		tmpDictValue.append(tmpDict)
-
-	# Manipulate 'tmpDictValue', it will be only 2 indices in the end which are Key and Value
-	if flg_mode == 0: tmpDictValue[1] = tarDict
-	elif flg_mode == 1:
-		idx_start   = len(tmpDictValue) - 1
-		flg_set_val = False
-
-		if len(listFound) < len(listKey):
-			if len(listFound) > 0:
-				curValue = tmpDictValue[len(tmpDictValue) - 1]
-				curValue.update(tarDict)
-				tmpDictValue[len(tmpDictValue) - 1] = curValue
-			flg_set_val  = True
-			idx_start	 = idx_start - 1
-
-		else: tarValue = hs_dataset.hs_prep_AnyList(tarValue)
+		Return True if keypath in 'tarDict' exists in 'mainDict', False vice versa
+		For example,
+		Case 1)
+			mainDict = {"role": "Bag", "table": {"delaytime": "no_delay"}}
+			tarDict  = {"table": {"range": "Modal"}}
+			Result   = False
 		
-		for cnt in range(idx_start, 0, -1):
-			if not flg_set_val:
-				curValue = tmpDictValue[cnt]
+		Case 2)
+			mainDict = {"role": "Bag", "table": {"delaytime": "no_delay"}}
+			tarDict  = {"table": {"delaytime": "delay_1"}}
+			Result   = True
 
-				if not isinstance(curValue, list): curValue = [curValue]
-				else: curValue = curValue.copy()
-			
-				curValue.extend(tarValue)
-				flg_set_val = True
-			
-			else:
-				curValue = tmpDictValue[cnt]
-				curValue[listFound[cnt]] = tmpDictValue[cnt + 1]
-			
-			tmpDictValue[cnt] = curValue
-
-	# Manipulate final dictionary based on 'flg_mode'
-	if flg_mode < 2: dictRes[tmpDictValue[0]] = tmpDictValue[1]
-	elif len(tmpDictValue) > 0: del dictRes[tmpDictValue[0]]
-	
-	#--- Release -----------------------------------------------------------------------------------
-	return dictRes
-
-def IBase_validate_dict_key_exist(mainDict, listKey, flg_mode):
-	#*** Documentation *****************************************************************************
-	'''Documentation 
-
-		Checks provided keys in 'listKey' (which are in sequence as a path) whether this path does
-		exist in 'mainDict'. 'flg_mode' determines the type of result
-
-		Result Format: flg_mode = 0
-		True:  'listKey' path does exist in 'mainDict'
-		False: 'listKey' path doesn't exist in 'mainDict'
-
-		Result Format: flg_mode = 1
-		Return deepest key found in 'mainDict', "" if nothing
+		Case 3)
+			mainDict = {"role": "Bag", "table": {"delaytime": "no_delay"}}
+			tarDict  = {"role": "Diluted;Bag"}
+			Result   = True
 
 	[dict] mainDict, Main dictionary
-	[list] listKey,  List of keys to be used as a path guideline
-	[int]  flg_mode, 0: True or False, 1: Return deepest key found in 'mainDict', "" if nothing
+	[dict] tarDict,  Dictionary to be validated
 
 	'''
 
 	#*** Input Validation **************************************************************************
-	if not isinstance(mainDict, dict): return False
+	if not (isinstance(mainDict, dict) and isinstance(tarDict, dict)): return 101
 
 	#*** Initialization ****************************************************************************
-	if not (isinstance(flg_mode, int) and flg_mode in range(0, 2)): flg_mode = 0
-	listKey   = hs_dataset.hs_prep_StrList(listKey)
-	listFound = []
-	tmpDict   = mainDict.copy()
+	chr_join = getconst_join_character()
+	blnRes   = False
 
 	#*** Operations ********************************************************************************
-	#--- Key Existence checking --------------------------------------------------------------------
-	for key in listKey:
-		if key in tmpDict:
-			tmpDict = tmpDict[key]
-			listFound.append(key)
+	#--- Get info of 'tarDict' ---------------------------------------------------------------------
+	keypath = chr_join.join(IBase_get_keylist_of_dict_single_path(tarDict)[0])
 
-			if not isinstance(tmpDict, dict): break
-		else: break
+	#--- Get Parameter-Value list of 'mainDict' ----------------------------------------------------
+	listParam = IBase_transform_dict_to_list(mainDict)[0]
 
-	#--- Result translation ------------------------------------------------------------------------
-	if flg_mode == 0:
-		if listFound[len(listFound) - 1] == listKey[len(listKey) - 1]: return True
-		else: return False
-	else: return listFound
+	#--- Validation --------------------------------------------------------------------------------
+	blnRes = keypath in listParam
 
-def IBase_merge_dict_single_path(mainDict, listDict):
+	#--- Release -----------------------------------------------------------------------------------
+	return blnRes
+
+def IBase_manipulate_dicts_target_key(dictA, dictB, strKey, flg_mode):
 	#*** Documentation *****************************************************************************
 	'''Documentation 
 
-		Merge each dictionary in 'listDict' to 'mainDict'
-		Each dictionary in 'listDict' must be a single path dictionary. Otherwise, only the first
-		path will be merged.
+		Manipulate target key on dictionary A and B and return the result for 'strKey' key path
+		Result is manipulated depends on 'flg_mode' operation mode
 
-	[dict] mainDict, Main dictionary
-	[list] listDict, List of single path dictionary to be merged to Main dictionary
+	[dict] dictA, 	 Dictionary A
+	[dict] dictB, 	 Dictionary B
+	[str]  strKey,   A string of key path (e.g. "ecs", "ecs.devicename", "gmd.table.range")
+	[int]  flg_mode, 0: Intersection, 1: Union
 
 	'''
 
 	#*** Input Validation **************************************************************************
-	if not isinstance(listDict, list): return {}
+	if not (isinstance(dictA, dict) and isinstance(dictB, dict) \
+			and (isinstance(strKey, str) and len(strKey) > 0)): return {}
 
 	#*** Initialization ****************************************************************************
-	dictRes = mainDict.copy()
+	if not (isinstance(flg_mode, int) and flg_mode in range(0, 2)): flg_mode = 1
+
+	chr_join = getconst_join_character()
+	flg_sub  = False
+	resVal   = "default"
 
 	#*** Operations ********************************************************************************
-	for cnt, thisDict in enumerate(listDict):
-		if cnt == 0: dictRes.update(thisDict)
+	#--- Get listPair of both dictionaries ---------------------------------------------------------
+	listPairA = IBase_transform_dict_to_list(dictA)
+	listPairB = IBase_transform_dict_to_list(dictB)
+
+	#--- Ensure 'strKey' exists on both dictionaries -----------------------------------------------
+	flg_val_A = strKey in listPairA[0]
+	flg_val_B = strKey in listPairB[0]
+
+	if flg_val_A: idx_a = listPairA[0].index(strKey)
+	if flg_val_B: idx_b = listPairB[0].index(strKey)
+
+	# Both dicts have no 'strKey' then nothing left for any mode
+	if not (flg_val_A or flg_val_B): resVal = ""
+
+	# Both dicts must have 'strKey' on Intersection mode
+	elif not (flg_val_A and flg_val_B) and flg_mode == 0: resVal = ""
+
+	# Only one dict has 'strKey' on Union mode, return immediately that dict
+	elif flg_val_A and not flg_val_B: resVal = listPairA[1][idx_a]
+	elif flg_val_B and not flg_val_A: resVal = listPairB[1][idx_b]
+
+	#--- Manipulation ------------------------------------------------------------------------------
+	if resVal == "default":
+		valDictA = listPairA[1][idx_a]
+		valDictB = listPairB[1][idx_b]
+		resVal   = []
+
+		if flg_mode == 0:
+			if valDictA == valDictB: resVal = valDictA
+			elif isinstance(valDictA, dict) != isinstance(valDictB, dict): resVal = ""
+			elif isinstance(valDictA, list) or isinstance(valDictB, list):
+				if not isinstance(valDictA, list): valDictA = [valDictA]
+				if not isinstance(valDictB, list): valDictB = [valDictB]
+
+				if len(valDictA) < len(valDictB):
+					listBase  = valDictA
+					listCheck = valDictB
+				else:
+					listBase  = valDictB
+					listCheck = valDictA
+
+				for eachInfo in listBase:
+					if eachInfo in listCheck: resVal.append(eachInfo)
+			else: resVal = ""
+
+		elif flg_mode == 1:
+			if isinstance(valDictA, list): resVal.extend(valDictA)
+			else: resVal.append(valDictA)
+
+			if isinstance(valDictB, list): resVal.extend(valDictB)
+			else: resVal.append(valDictB)
+			
+	if isinstance(resVal, list): resVal = bbs_remove_dupl(resVal, True)
+	tmpList = strKey.split(chr_join)
+	tmpList.append(resVal)
+
+	resVal  = hs_create_dict_from_serial_list(tmpList)[1]
+
+	#--- Release -----------------------------------------------------------------------------------
+	return resVal
+
+def IBase_operation_union_dicts(listDict):
+	#*** Documentation *****************************************************************************
+	'''Documentation 
+
+		Combine every dictionaries provided in 'listDict' with 'Union' operation
+
+	[list] listDict, A list of dictionaries to be combined with union operation
+
+	'''
+
+	#*** Input Validation **************************************************************************
+	if not isinstance(listDict, list):
+		if isinstance(listDict, dict): return listDict
+		else: return {}
+
+	#*** Initialization ****************************************************************************
+	chr_join = getconst_join_character()
+	dictRes  = {}
+
+	#*** Operations ********************************************************************************
+	for eachDict in listDict:
+		if len(dictRes.keys()) == 0: dictRes = eachDict.copy()
 		else:
-			listKey = IBase_get_keylist_of_dict_single_path(thisDict)
-			dictRes = IBase_update_dict_by_path(dictRes, listKey[0], listKey[1], 1)
+			listParam = IBase_transform_dict_to_list(dictRes)[0]
+			listParam.extend(IBase_transform_dict_to_list(eachDict)[0])
+			listParam = bbs_remove_dupl(listParam, True)
+			listRes   = [[], []]
+
+			for eachKey in listParam:
+				listRes[0].append(eachKey.split(chr_join)[0])
+				listRes[1].append(IBase_manipulate_dicts_target_key(dictRes, eachDict, eachKey, 1))
+
+			listMainKey = listRes[0].copy()
+			listMainKey = bbs_remove_dupl(listMainKey, True)
+			listPrepVal = []
+
+			for thisMainKey in listMainKey:
+				listTmpVal = []
+				
+				for idx, eachVal in enumerate(listRes[1]):
+					if listRes[0][idx] == thisMainKey: listTmpVal.append(listRes[1][idx])
+
+				if len(listTmpVal) == 1: listPrepVal.append(listTmpVal[0])
+				elif len(listTmpVal) > 1:
+					combVal = []
+					for eachTmpVal in listTmpVal:
+						if not isinstance(eachTmpVal, list): eachTmpVal = [eachTmpVal]
+						if len(combVal) == 0: combVal.extend(eachTmpVal)
+						else:
+							for cnt in range(0, len(eachTmpVal)):
+								arr_idx = 0
+								curKeys = IBase_get_keylist_of_dict_single_path(eachTmpVal[cnt])[0]
+								tarDict = {}
+								tarDict[curKeys[0]] = eachTmpVal[cnt][curKeys[0]]
+
+								while IBase_validate_dict_key_exist(combVal[arr_idx], tarDict):
+									arr_idx += 1
+								combVal[arr_idx] = IBase_operation_union_dicts([combVal[arr_idx], tarDict])
+
+					if len(combVal) == 1: combVal = combVal[0]
+					listPrepVal.append(combVal)
+
+			dictRes = {}
+			for eachKey, eachValue in zip(listMainKey, listPrepVal): dictRes[eachKey] = eachValue
 
 	#--- Release -----------------------------------------------------------------------------------
 	return dictRes
 
-def IBase_format_json_ema_devicebased(dictData):
+def IBase_transform_list_to_dict(listData):
 	#*** Documentation *****************************************************************************
 	'''Documentation 
 
-		Format 'dictData' to Device-Based dictionary (for EMA usage)
-		It's expected that the size of each array should be same on each parameter since it's the
-		size of arrays represent the amount of device (None of parameter should have different size)
+		Transform formatted 'listData' List into Python dictionary object
 
-		e.g. Normal JSON:	'gmd': {'devicename': ['SULEV', 'CONTBAG'], 'activate': ['Yes', 'Yes']
-			 EMA JSON: 	 	'gmd': [{'devicename': 'SULEV', 'activate': 'Yes'}, \
-			  						{'devicename':'CONTBAG', 'activate': 'Yes'}]
-
-	[dict] dictData, Target Dictionary to be formatted
-
-	'''
-
-	#*** Input Validation **************************************************************************
-	if not isinstance(dictData, dict): return dictData
-
-	#*** Initialization ****************************************************************************
-	dictRes = {}
-
-	#*** Operations ********************************************************************************
-	for mainKey in dictData:
-		if not isinstance(dictData[mainKey], dict): dictRes[mainKey] = dictData[mainKey]
-		else:
-			dictRes[mainKey] = ""
-			flg_array 		 = 0 		# 0: Init, 1: Done, No Array, 2: Done, Array is found 
-
-
-
-	#--- Release -----------------------------------------------------------------------------------
-	return dictRes
-
-def IBase_transform_list_to_dict(listData, flg_allstring, flg_case):
-	#*** Documentation *****************************************************************************
-	'''Documentation 
-
-		Transform 'listData' List into Python dictionary object
-
-	[list] listData, 	  Target flatten list to be transformed to dictionary
-	[bool] flg_allstring, True: Convert all values into String, False: no conversion
-	[int]  flg_case,  	  0: Do nothing, 1: Convert all string to upper case, 2: ... to lower case
+	[list] listData, 	  Target formatted Parameter-Value list to be transformed to dictionary
 
 	'''
 
@@ -388,50 +455,34 @@ def IBase_transform_list_to_dict(listData, flg_allstring, flg_case):
 	if not isinstance(listData, list): return {}	
 
 	#*** Initialization ****************************************************************************
-	if isinstance(flg_allstring, int):
-		if flg_allstring != 0: flg_allstring = True
-		else: flg_allstring = False
-	
-	if not isinstance(flg_allstring, bool): flg_allstring = False
-	if not (isinstance(flg_case, int) and flg_case in range(0, 3)): flg_case = 0
-
-	listKey    = listData[0]
-	listVal    = listData[1]
-	listPrep   = [[], []]
-	dictRes    = {}
+	chr_join  = getconst_join_character()
+	listParam = listData[0]
+	listValue = listData[1]
+	dictRes   = {}
 
 	#*** Operations ********************************************************************************
 	#--- Post-Validation ---------------------------------------------------------------------------
-	if not (isinstance(listKey, list) and isinstance(listVal, list)): return {}
-	if len(listKey) != len(listVal): return {}
-
-	#--- Flatten 'listData' ------------------------------------------------------------------------
-	for thisKey, thisVal in zip(listKey, listVal):
-		if flg_allstring: thisVal = str(thisVal)
-		if flg_case == 1 and isinstance(thisVal, str): thisVal = thisVal.upper()
-		if flg_case == 2 and isinstance(thisVal, str): thisVal = thisVal.lower()
-
-		if not thisKey in listPrep[0]:
-			listPrep[0].append(thisKey)
-			listPrep[1].append([thisVal])
-	
-		else:
-			idx_key = listPrep[0].index(thisKey)
-			listPrep[1][idx_key].append(thisVal)
+	if not (isinstance(listParam, list) and isinstance(listValue, list)): return {}
+	if len(listParam) != len(listValue): return {}
 
 	#--- Transform conditioned data to dictionary --------------------------------------------------
-	for idx in range(0, len(listPrep[0])):
-		thisKey = listPrep[0][idx].split(".")
-		thisVal = listPrep[1][idx]
+	for keypath, arrVal in zip(listParam, listValue):
+		listCurDicts = [dictRes]
+		listKeys 	 = keypath.split(chr_join)
 
-		if isinstance(thisVal, list) and len(thisVal) == 1: thisVal = thisVal[0]
+		for eachVal in arrVal:
+			tmpDict = {}
+			tmpKeys = listKeys.copy()
+			tmpKeys.append(eachVal)
+			tmpInfo = hs_create_dict_from_serial_list(tmpKeys)
+			tmpDict[tmpInfo[0]] = tmpInfo[1]
+			listCurDicts.append(tmpDict)
 
-		thisKey.append(thisVal)
-		dictParam = hs_create_dict_from_serial_list(thisKey)
-		curDict   = {}
-		curDict[dictParam[0]] = dictParam[1]
-		curKeys   = IBase_get_keylist_of_dict_single_path(curDict)
-		dictRes   = IBase_update_dict_by_path(dictRes, curKeys[0], curKeys[1], 1)
+		print("---------------------------------")
+		print(listCurDicts)
+		dictRes = IBase_operation_union_dicts(listCurDicts)
+		print("Result is ...")
+		print(dictRes)
 
 	#--- Release -----------------------------------------------------------------------------------
 	return dictRes
@@ -450,51 +501,64 @@ def IBase_transform_dict_to_list(dictData):
 	# Nothing to be pre-validated
 
 	#*** Initialization ****************************************************************************
-	listVal = [] 		# [dictInfoLvl0, dictInfoLvl1, ....], dictInfoLvlX = [listParam, listValue]
+	chr_join = getconst_join_character()
+	listVal  = [] 		# [dictInfoLvl0, dictInfoLvl1, ....], dictInfoLvlX = [listParam, listValue]
 
 	#*** Operations ********************************************************************************
 	#--- Post-Validation ---------------------------------------------------------------------------
-	if not isinstance(dictData, dict): return listRes
+	if not isinstance(dictData, dict): return [[], []]
+
+	#--- Init Transformation parameters ------------------------------------------------------------
+	cnt_dict = 0
+	dictPrev = dictData.copy()
+	listVal.append([[], []])
+
+	for key in dictData.keys():
+		thisValue = dictData[key]
+		listVal[0][0].append(key)
+		listVal[0][1].append(thisValue)
+		if isinstance(thisValue, dict): cnt_dict += 1
+		if isinstance(thisValue, list):
+			for eachValue in thisValue:
+				if isinstance(eachValue, dict): cnt_dict += 1
+	if cnt_dict == 0: return listVal[0]
 
 	#--- Transform target dictionary ---------------------------------------------------------------
-	dictPrev = dictData.copy()
-	cnt_col  = 0
 	flg_work = True
 
 	while flg_work:
 		#--- Init current level --------------------------------------------------------------------
 		cnt_dict = 0
-
-		#--- Collect current level information -----------------------------------------------------
+		col_curr = len(listVal)
 		listVal.append([[], []])
 
-		# Case: reference info is a dict
-		if isinstance(dictPrev, dict):
-			for key in dictPrev:
-				itsValue = dictPrev[key]
-				listVal[cnt_col][0].append(key)
-				listVal[cnt_col][1].append(itsValue)
-				if isinstance(itsValue, dict): cnt_dict = cnt_dict + 1
+		#--- Flatten current level Parameter-Value ------------------------------------------------- 
+		for idx, key in enumerate(listVal[col_curr - 1][0]):
+			thisValue = listVal[col_curr - 1][1][idx]
 
-		# Case: refernece info is a List of Parameter-Value
-		else:
-			for idx, eachParam in enumerate(dictPrev[0]):
-				itsValue = dictPrev[1][idx]
-				
-				if not isinstance(itsValue, dict):
-					listVal[cnt_col][0].append(eachParam)
-					listVal[cnt_col][1].append(itsValue)
-				else:
-					for key in itsValue:
-						listVal[cnt_col][0].append(eachParam + "." + key)
-						listVal[cnt_col][1].append(itsValue[key])
-						if isinstance(itsValue, dict): cnt_dict = cnt_dict + 1
+			# Case: Not neither 'dict' nor 'list' type, can be appended immediately
+			if not (isinstance(thisValue, dict) or isinstance(thisValue, list)):
+				listVal[col_curr][0].append(key)
+				listVal[col_curr][1].append(thisValue)
+			
+			# Case: 'dict' or 'list', treat in list way and use recursive method
+			else:
+				if isinstance(thisValue, dict): thisValue = [thisValue]
+				for eachValue in thisValue:
+					if isinstance(eachValue, dict): RetVal = IBase_transform_dict_to_list(eachValue)
+					else: RetVal = [[key], [eachValue]]
+
+					# Dict-left check
+					for eachFlattenVal in RetVal[1]:
+						if isinstance(eachFlattenVal, dict): cnt_dict += 1
+
+					# Append sub-current 'RetVal' to Result list
+					RetVal[0] = [chr_join.join([key, x]) for x in RetVal[0]]
+					listVal[col_curr][0].extend(RetVal[0])
+					listVal[col_curr][1].extend(RetVal[1])
 
 		#--- Release current level -----------------------------------------------------------------
 		if cnt_dict == 0: flg_work = False
-		else:
-			dictPrev = listVal[cnt_col]
-			cnt_col += 1
 
 	#--- Release -----------------------------------------------------------------------------------
 	return listVal[len(listVal) - 1]
@@ -537,11 +601,11 @@ def IUser_transform_dataset_to_json(listData, flg_allstring, flg_case):
 	# Nothing to be initialized
 
 	#*** Operations ********************************************************************************
-	#--- Transform 'listData' into Python dictionary object ----------------------------------------
-	RetVal = IBase_transform_list_to_dict(listData, flg_allstring, flg_case)
+	#--- Format 'listData' to expected format ------------------------------------------------------
+	listData = hs_get_formatted_listpair(listData, flg_allstring, flg_case)
 
-	#--- Transform final dictionary to Device-Based format -----------------------------------------
-	#RetVal = IBase_format_json_ema_devicebased(RetVal)
+	#--- Transform 'listData' into Python dictionary object ----------------------------------------
+	RetVal = IBase_transform_list_to_dict(listData)
 
 	#--- Release -----------------------------------------------------------------------------------
 	return IBase_transform_dict_to_json(RetVal)
@@ -551,13 +615,15 @@ def IUser_transform_dataset_to_json(listData, flg_allstring, flg_case):
 # Debuging Area
 listKey = ["nameFlowstream", "ecs.devicename", "ecs.activate", \
  			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range", \
+ 			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range", \
  			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range"]
 
 listVal = ["B: Gas SULEV/Bag", "CVS", "Yes", \
  			"SULEV", "Yes", "Bag", "no_delay", "Modal", \
- 			"CONTBAG", "Yes", "Diluted;Bag", "Modal", "Modal;Bag"]
+ 			"CONT_BAG", "Yes", "Diluted;Bag", "delay_comm", "Modal;Bag", \
+ 			"CONT_BAG_THC", "Yes", "Diluted;Bag", "delay_comm1", "OnlyTHC"]
 
 listParam = [listKey, listVal]
 
 RetVal = IUser_transform_dataset_to_json(listParam, False, 0)
-
+print(RetVal)
