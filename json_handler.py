@@ -607,14 +607,3 @@ def IUser_transform_dataset_to_json(listData, flg_allstring, flg_case):
 	return IBase_transform_dict_to_json(dictData)
 
 
-
-# Debuging Area
-listKey = ["nameFlowstream", "ecs.devicename", "ecs.activate", \
- 			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range", \
- 			"gmd.devicename", "gmd.activate", "gmd.role", "gmd.table.delaytime", "gmd.table.range"]
-
-listVal = ["B: Gas SULEV/Bag", "CVS", "Yes", \
- 			"SULEV", "Yes", "Bag", "no_delay", "Autorange", \
- 			"CONT_BAG_THC", "Yes", "Diluted;Bag", "delay_comm", "OnlyTHC"]
-
-listParam = [listKey, listVal]
