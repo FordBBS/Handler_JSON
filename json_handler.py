@@ -19,6 +19,7 @@
 # 					- Implemented 'IBase_manipulate_dicts_target_key'
 # 					- Implemented 'IBase_operation_union_dicts'
 # 					- Remove 'IBase_update_dict_by_path', 'IBase_merge_dict_single_path'
+# 2020/08/19, BBS: 	- Improved 'hs_get_formatted_listpair', 'IBase_transform_list_to_dict'
 #
 #***************************************************************************************************
 
@@ -119,10 +120,10 @@ def hs_get_formatted_listpair(listPair, flg_allstring, flg_case):
 	#*** Operations ********************************************************************************
 	for eachKey in listParam:
 		if not eachKey in listPrep[0]:
+			cnt = 0
 			idx = 0
 			listPrep[0].append(eachKey)
-			listPrep[1].append([])
-
+		
 			while idx >= 0:
 				try:
 					idx 	= listParam.index(eachKey, idx)
@@ -132,7 +133,16 @@ def hs_get_formatted_listpair(listPair, flg_allstring, flg_case):
 					if flg_case == 1: eachVal = eachVal.upper()
 					elif flg_case == 2: eachVal = eachVal.lower()
 
-					listPrep[1][len(listPrep[1]) - 1].append(eachVal)
+					if cnt == 0:
+						idx_pos = len(listPrep[1])
+						listPrep[1].append(eachVal)
+					else:
+						if cnt == 1:
+							curVal = listPrep[1][idx_pos]
+							listPrep[1][idx_pos] = [curVal]
+						listPrep[1][idx_pos].append(eachVal)
+
+					cnt += 1
 					idx += 1
 				except: idx = -1
 	return listPrep
@@ -470,6 +480,7 @@ def IBase_transform_list_to_dict(listData):
 		listCurDicts = [dictRes]
 		listKeys 	 = keypath.split(chr_join)
 
+		if not isinstance(arrVal, list): arrVal = [arrVal]
 		for eachVal in arrVal:
 			tmpDict = {}
 			tmpKeys = listKeys.copy()
