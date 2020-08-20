@@ -7,8 +7,8 @@ Function IBase_get_value_from_strLine(ByVal strLine, ByVal chr_sep)
 	'*** Documentation *****************************************************************************
 	' 	Return array of Parameter or Value available on 'strLine' with JSON structure
 	'	e.g. strLine = "testcell_name": "LD06", 	-> ("testcell_name", "LD06")
-	' 		 strLine = "config_params": [ 			-> ("config_params", "")
-	' 		 strLine = }, 							-> ("", "")
+	' 		 strLine = "config_params": [ 			-> ("config_params")
+	' 		 strLine = }, 							-> ("")
 	' 		 strLine = "Test" 						-> ("", "Test")
 	'
 	'	Argument(s)
@@ -25,13 +25,17 @@ Function IBase_get_value_from_strLine(ByVal strLine, ByVal chr_sep)
 	If len(strLine) < 1 Then Exit Function
 
 	'*** Initialization ****************************************************************************
-	Dim flg_bln, flg_sum, cnt_idx, cnt_pos, curValue, arrValue(1)
+	Dim flg_bln, flg_sum, cnt_idx, cnt_pos, curValue, arrChrNotVal(3), arrValue(1)
 
 	If LCase(TypeName(chr_sep)) <> "string" Then chr_sep = ":"
 	If len(chr_sep) = 0 Then chr_sep = ":"
 
-	arrValue(0) = ""
-	arrValue(1) = ""
+	arrChrNotVal(0) = "{"
+	arrChrNotVal(1) = "}"
+	arrChrNotVal(2) = "["
+	arrChrNotVal(3) = "]"
+	arrValue(0) 	= ""
+	arrValue(1) 	= ""
 
 	'*** Operations ********************************************************************************
 	'--- Clear spaces and tabs on left and right sides ---------------------------------------------
@@ -79,6 +83,13 @@ Function IBase_get_value_from_strLine(ByVal strLine, ByVal chr_sep)
 					If Mid(strLine, cnt_idx, 1) <> " " and Mid(strLine, cnt_idx, 1) <> vbTab Then
 						flg_bln = False
 						arrValue(1) = Mid(strLine, cnt_idx, len(strLine))
+
+						For cnt_idx = 0 to UBound(arrChrNotVal)
+							If InStr(arrValue(1), arrChrNotVal(cnt_idx)) > 0 Then
+								arrValue(1) = ""
+								Exit For
+							End If
+						Next
 					Else
 						cnt_idx = cnt_idx + 1
 					End If
@@ -87,9 +98,14 @@ Function IBase_get_value_from_strLine(ByVal strLine, ByVal chr_sep)
 		End If
 
 	'--- Check Not Exist ---------------------------------------------------------------------------
-	ElseIf Not (InStr(strLine, "{") > 0 or InStr(strLine, "{") > 0 _
-			or InStr(strLine, "[") > 0 or InStr(strLine, "]") > 0) Then
-		arrValue(1) = strLine
+	Else
+		For cnt_idx = 0 to UBound(arrChrNotVal)
+			If InStr(strLine, arrChrNotVal(cnt_idx)) > 0 Then
+				Exit For
+			ElseIf cnt_idx = UBound(arrChrNotVal) Then
+				arrValue(1) = strLine
+			End If
+		Next
 	End If
 
 	IBase_get_value_from_strLine = arrValue
