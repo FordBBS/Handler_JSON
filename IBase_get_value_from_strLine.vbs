@@ -65,7 +65,6 @@ Function IBase_get_value_from_strLine(ByVal strLine, ByVal chr_sep)
 	cnt_idx = Instr(strLine, chr(34))
 
 	If cnt_idx > 0 Then
-		' Try getting Parameter name
 		cnt_pos = InStr(cnt_idx + 1, strLine, chr(34))
 
 		If cnt_pos > 0 Then
@@ -76,14 +75,15 @@ Function IBase_get_value_from_strLine(ByVal strLine, ByVal chr_sep)
 				cnt_idx = InStr(cnt_idx, strLine, chr(34)) + 1
 				cnt_pos = InStr(cnt_idx, strLine, chr(34))
 				arrValue(1) = Mid(strLine, cnt_idx, cnt_pos - cnt_idx)
+			
 			Else
 				flg_bln = True
 
 				while flg_bln
 					If Mid(strLine, cnt_idx, 1) <> " " and Mid(strLine, cnt_idx, 1) <> vbTab Then
-						flg_bln = False
+						flg_bln 	= False
 						arrValue(1) = Mid(strLine, cnt_idx, len(strLine))
-
+						
 						For cnt_idx = 0 to UBound(arrChrNotVal)
 							If InStr(arrValue(1), arrChrNotVal(cnt_idx)) > 0 Then
 								arrValue(1) = ""
