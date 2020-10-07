@@ -4,6 +4,7 @@
 ' 2020/09/19, BBS:	- Updated 'hs_arr_append'
 ' 2020/09/21, BBS: 	- Updated 'IUser_translate_json_strContent'
 ' 2020/10/07, BBS:	- Updated 'IUser_translate_json_strContent'
+' 					- Implemented 'IUser_read_json_from_file'
 '
 '***************************************************************************************************
 
@@ -892,9 +893,10 @@ End Function
 
 
 '*** Local Material ********************************************************************************
-Function IUser_read_json(ByVal strPathFile, ByVal arrReplaceTag)
+Function IUser_read_json_from_file(ByVal strPathFile, ByVal arrReplaceTag)
 	'*** History ***********************************************************************************
 	' 2020/08/27, BBS:	- First Release
+	' 2020/10/07, BBS:	- Breaks operation into another function for better interface wise
 	'
 	'***********************************************************************************************
 	
@@ -906,7 +908,7 @@ Function IUser_read_json(ByVal strPathFile, ByVal arrReplaceTag)
 	'***********************************************************************************************
 
 	On Error Resume Next
-	IUser_read_json = Array(Array(), Array())
+	IUser_read_json_from_file = Array(Array(), Array())
 
 	'*** Initialization ****************************************************************************
 	Dim strContent, arrParamValue, RetVal
@@ -917,10 +919,44 @@ Function IUser_read_json(ByVal strPathFile, ByVal arrReplaceTag)
 	If len(strContent) = 0 Then Exit Function
 
 	'--- Translate read JSON file ------------------------------------------------------------------
-	RetVal = IUser_translate_json_strContent(strContent)
+	IUser_read_json_from_file = IUser_read_json(strContent, arrReplaceTag)
+
+	'*** Error handler *****************************************************************************
+	If Err.Number <> 0 Then
+		Err.Clear
+	End If
+End Function
+
+Function IUser_read_json(ByVal strJsonContent, ByVal arrReplaceTag)
+	'*** History ***********************************************************************************
+	' 2020/10/07, BBS:	- First Release
+	'
+	'***********************************************************************************************
+	
+	'*** Documentation *****************************************************************************
+	' 	Return Parameters-Values array of provided JSON string content 'strJsonContent'
+	'	e.g. (("ecs.devicename", "ecs.activate"), ("CVS_SL", "Yes"))
+	' 		 (("gmd.devicename"), ("%tag%0%tag%SULEV%;%%tag%1%tag%CONT_BAG"))
+	'
+	'***********************************************************************************************
+
+	On Error Resume Next
+	IUser_read_json = Array(Array(), Array())
+
+	'*** Pre-Validation ****************************************************************************
+	If len(CStr(strJsonContent)) = 0 Then
+		Exit Function
+	End If
+
+	'*** Initialization ****************************************************************************
+	Dim RetVal
+
+	'*** Operations ********************************************************************************
+	'--- Translate read JSON file ------------------------------------------------------------------
+	RetVal = IUser_translate_json_strContent(strJsonContent)
 
 	'--- Clean Parameter path ----------------------------------------------------------------------
-	RetVal(0) = IUser_clean_ParamPath(RetVal(0), arrReplaceTag)
+	RetVal(0) 		= IUser_clean_ParamPath(RetVal(0), arrReplaceTag)
 	IUser_read_json = RetVal
 
 	'*** Error handler *****************************************************************************
