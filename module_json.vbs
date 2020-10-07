@@ -3,6 +3,7 @@
 ' 					- Imported all mandatory materials
 ' 2020/09/19, BBS:	- Updated 'hs_arr_append'
 ' 2020/09/21, BBS: 	- Updated 'IUser_translate_json_strContent'
+' 2020/10/07, BBS:	- Updated 'IUser_translate_json_strContent'
 '
 '***************************************************************************************************
 
@@ -149,6 +150,7 @@ Function IUser_translate_json_strContent(ByVal strContent)
 	' 					1) Array tag is not removed when it's only one tag left
 	'					2) Parameter path ends with "." for any value that has array value line
 	' 2020/09/21, BBS:	- Bug fixed, Array branching is not closed correctly
+	' 2020/10/07, BBS:	- Bug fixed, Empty parameter is not translated correctly
 	'
 	'***********************************************************************************************
 	
@@ -169,7 +171,7 @@ Function IUser_translate_json_strContent(ByVal strContent)
 	'*** Initialization ****************************************************************************
 	Dim cnt1, cnt_row, flg_append, tagBranch, tagLabel, tagLatest, thisParam, thisValue, existValue
 	Dim curRoot, curPath, strTagArray, strTagValue, strTagRemove, strParamEx, strBrnTag, strBrnIdx
-	Dim flg_clr_rt, arrContent, arrThisInfo, arrRoot, arrBrn, arrParam(), arrValue()
+	Dim flg_clr_rt, arrContent, arrThisInfo, arrRoot, arrBrnIdx, arrParam(), arrValue()
 	Redim Preserve arrParam(0), arrValue(0)
 
 	arrContent  = Split(strContent, vbCrLf)
@@ -192,8 +194,12 @@ Function IUser_translate_json_strContent(ByVal strContent)
 		flg_clr_rt  = False
 
 		If thisParam <> "" Then 	' Case: Parameter does exist
+			' Case: Empty Parameter, No value, No SubGroup
+			If InStr(arrContent(cnt_row), "{}") > 0 or InStr(arrContent(cnt_row), "[]") > 0 Then
+				flg_append = True
+
 			' Case: Value doesn't exist but SubGroup's or Array's symbol
-			If InStr(arrContent(cnt_row), "{") > 0 or InStr(arrContent(cnt_row), "[") > 0 Then
+			ElseIf InStr(arrContent(cnt_row), "{") > 0 or InStr(arrContent(cnt_row), "[") > 0 Then
 				If curRoot <> "" Then
 					curRoot = Join(Array(curRoot, thisParam), ".")
 				Else
@@ -317,7 +323,7 @@ Function IUser_translate_json_strContent(ByVal strContent)
 					arrBrnIdx(UBound(arrBrnIdx)) = CStr(CInt(arrBrnIdx(UBound(arrBrnIdx))) + 1)
 					strBrnIdx = Join(arrBrnIdx, ";")
 				End If
-			
+
 				arrValue(cnt1) = existValue & "%;%" & tagBranch & strBrnIdx & tagBranch & thisValue
 				
 			' Case: Current Parameter path has its first time appending
