@@ -897,6 +897,7 @@ Function IUser_read_json_from_file(ByVal strPathFile, ByVal arrReplaceTag)
 	'*** History ***********************************************************************************
 	' 2020/08/27, BBS:	- First Release
 	' 2020/10/07, BBS:	- Breaks operation into another function for better interface wise
+	' 2020/11/06, BBS:	- Slightly adapted on PUMA environment
 	'
 	'***********************************************************************************************
 	
@@ -911,15 +912,27 @@ Function IUser_read_json_from_file(ByVal strPathFile, ByVal arrReplaceTag)
 	IUser_read_json_from_file = Array(Array(), Array())
 
 	'*** Initialization ****************************************************************************
-	Dim strContent, arrParamValue, RetVal
+	Dim strContent, RetVal, arrOrder, arrValue
 
 	'*** Operations ********************************************************************************
 	'--- Read target JSON file ---------------------------------------------------------------------
 	strContent = hs_read_text_file(strPathFile)
-	If len(strContent) = 0 Then Exit Function
+	
+	If len(strContent) = 0 Then
+		Exit Function
+	End If
 
 	'--- Translate read JSON file ------------------------------------------------------------------
-	IUser_read_json_from_file = IUser_read_json(strContent, arrReplaceTag)
+	RetVal = IUser_read_json(strContent, arrReplaceTag)
+	
+	If Not IsArray(RetVal) Then
+		Exit Function
+	End If
+	
+	'--- Release -----------------------------------------------------------------------------------
+	arrOrder = RetVal(0)
+	arrValue = RetVal(1)
+	IUser_read_json_from_file = Array(arrOrder, arrValue)
 
 	'*** Error handler *****************************************************************************
 	If Err.Number <> 0 Then
@@ -930,6 +943,7 @@ End Function
 Function IUser_read_json(ByVal strJsonContent, ByVal arrReplaceTag)
 	'*** History ***********************************************************************************
 	' 2020/10/07, BBS:	- First Release
+	' 2020/11/06, BBS:	- Slightly adapted on PUMA environment
 	'
 	'***********************************************************************************************
 	
@@ -949,15 +963,22 @@ Function IUser_read_json(ByVal strJsonContent, ByVal arrReplaceTag)
 	End If
 
 	'*** Initialization ****************************************************************************
-	Dim RetVal
+	Dim RetVal, arrOrder, arrValue
 
 	'*** Operations ********************************************************************************
 	'--- Translate read JSON file ------------------------------------------------------------------
 	RetVal = IUser_translate_json_strContent(strJsonContent)
-
+	
+	If Not IsArray(RetVal) Then
+		Exit Function
+	End If
+	
 	'--- Clean Parameter path ----------------------------------------------------------------------
-	RetVal(0) 		= IUser_clean_ParamPath(RetVal(0), arrReplaceTag)
-	IUser_read_json = RetVal
+	arrOrder = IUser_clean_ParamPath(RetVal(0), arrReplaceTag)
+	
+	'--- Release -----------------------------------------------------------------------------------
+	arrValue = RetVal(1)
+	IUser_read_json = Array(arrOrder, arrValue)
 
 	'*** Error handler *****************************************************************************
 	If Err.Number <> 0 Then
