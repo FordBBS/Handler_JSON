@@ -5,6 +5,7 @@
 ' 2020/09/21, BBS: 	- Updated 'IUser_translate_json_strContent'
 ' 2020/10/07, BBS:	- Updated 'IUser_translate_json_strContent'
 ' 					- Implemented 'IUser_read_json_from_file'
+' 2020/12/11, BBS:	- Updated 'IBase_create_resParamValue'
 '
 '***************************************************************************************************
 
@@ -14,7 +15,7 @@
 ' (Version 2020/08/23) IUser_clean_ParamPath
 ' (Version 2020/09/21) IUser_translate_json_strContent
 ' (Version 2020/08/27) IUser_translate_resParamValue
-' (Version 2020/08/27) IBase_create_resParamValue
+' (Version 2020/12/11) IBase_create_resParamValue
 ' (Version 2020/08/26) IBase_getinfo_resParamValue
 ' (Version 2020/08/23) IBase_get_value_from_strLine
 ' (Version 2020/09/19) hs_arr_append
@@ -441,8 +442,9 @@ End Function
 Function IBase_create_resParamValue(ByVal strValue)
 	'*** History ***********************************************************************************
 	' 2020/08/26, BBS:	- First Release
-	' 2020/08/27, BBS:	- bug fixed when 'strValue' has only one level
-	'					- bug fixed, invalid If-Else condition for creating result for new branch
+	' 2020/08/27, BBS:	- Bug fixed, when 'strValue' has only one level
+	'					- Bug fixed, invalid If-Else condition for creating result for new branch
+	' 2020/12/11, BBS:	- Overhaul mechanism
 	'
 	'***********************************************************************************************
 
@@ -453,6 +455,9 @@ Function IBase_create_resParamValue(ByVal strValue)
 	'
 	' 		  strValue = "%tag%0;0;0%tag%Modal%;%%tag%0;0;1%tag%Bag%;%%tag%0;1;0%tag%THC"
 	' 		  Return ((("Modal", "Bag"), ("THC")))
+	'
+	'		  strValue = "%tag%0;0%tag%SULEV%;%%tag%0;1%tag%CONT_BAG%;%%tag%2;0%tag%CONT_BAG_THC"
+	' 		  Return (("SULEV", "CONT_BAG"), (), ("CONT_BAG_THC"))
 	'	
 	'	Argument(s)
 	'	<String> strValue, A string value created by 'IUser_translate_json_strContent'
@@ -464,14 +469,17 @@ Function IBase_create_resParamValue(ByVal strValue)
 
 	'*** Pre-Validation ****************************************************************************
 	strValue = CStr(strValue)
-	If len(strValue) = 0 Then Exit Function
+	If Len(strValue) = 0 Then
+		Exit Function
+	End If
 
 	'*** Initialization ****************************************************************************
-	Dim cnt1, cnt2, cnt_level, thisInfo, thisValue, flg_create, tmpValue
-	Dim arrValue, arrTagIdx, arrThis, arrTmpSnap, arrSnapObj, arrSnapIdx, arrBase(), arrRet()
-	Redim Preserve  arrBase(0), arrRet(0)
-
+	Dim cnt1, cnt2, cnt3, stack_lvl, corr_lvl, thisInfo, thisValue, flg_create
+	Dim arrRet, arrValue, arrTagIdx, arrPrep, arrTmp, arrSnapIdx, arrSnapObj, arrSnapTmp
+	Dim thisTag, tarSnapObj, tarSnapIdx
+	
 	arrValue = Split(strValue, "%;%")
+	arrRet 	 = Array()
 
 	'*** Operations ********************************************************************************
 	For cnt1 = 0 to UBound(arrValue)
@@ -479,108 +487,92 @@ Function IBase_create_resParamValue(ByVal strValue)
 		thisValue  = thisInfo(0) 
 		arrTagIdx  = Split(thisInfo(1), ";")
 		flg_create = False
+		flg_snap   = False
+		arrSnapIdx = Array()
+		arrSnapObj = Array()
 
+		'--- Analysis of 'thisValue' information ---------------------------------------------------
+		' Case: First value, skips snapshot analysis
 		If cnt1 = 0 Then
-			flg_create = True
-			cnt_level  = UBound(arrTagIdx) - 1
+			flg_create 	= True
+			stack_lvl	= UBound(arrTagIdx) - 1		'Set needed stack level
+			corr_lvl 	= 0							'Set start level of correction
+		
+		' Case: General, performs snapshot analysis
 		Else
-			arrThis    = arrRet
-			arrSnapObj = Array()
-			arrSnapIdx = Array()
+			arrTmp = arrRet
 
 			For cnt2 = 0 to UBound(arrTagIdx)
-				Call hs_arr_append(arrSnapIdx, CInt(arrTagIdx(cnt2))) 	'Snaps target index
+				thisTag = CInt(arrTagIdx(cnt2))
+				Call hs_arr_append(arrSnapIdx, thisTag)
 
-				If UBound(arrThis) < CInt(arrTagIdx(cnt2)) Then 		'Branch is needed now
-					cnt_level = UBound(arrTagIdx) - cnt2
-
-					If cnt_level > 0 Then
-						flg_create = True
-					Else
-						Call hs_arr_append(arrThis, thisValue)
-					End If
-
+				' Case: Result array has no target position yet
+				If UBound(arrTmp) < thisTag Then
+					stack_lvl  = UBound(arrTagIdx) - cnt2 - 1	'Set needed stack level
+					corr_lvl   = cnt2 							'Set start level of correction
+					flg_create = True
 					Exit For
-				Else
-					' Snapshot of thisLevel's object(s)
- 					Call hs_arr_append(arrSnapObj, arrThis)
 
- 					' Update 'arrThis' for next level validation
- 					tmpValue = arrThis(CInt(arrTagIdx(cnt2)))
- 					arrThis  = tmpValue
+				' Case: Result array covers target position
+				Else
+					Call hs_arr_append(arrSnapObj, arrTmp) 	'Snapshot
+
+					' Prepared next iteration
+					arrSnapTmp = arrTmp(thisTag)
+					arrTmp     = arrSnapTmp
 				End If
 			Next
 		End If
 
-		' Create Array of thisValue for the new branch case
+		'--- Create new base array for 'thisValue' -------------------------------------------------
 		If flg_create Then
-			' Create base array
-			Erase arrBase
-			Redim Preserve arrBase(0)
+			If UBound(arrTagIdx) > 0 and UBound(arrSnapObj) < 0 Then
+				arrPrep = Array()
 
-			If UBound(arrTagIdx) < 1 Then
-				arrThis = thisValue
-			Else
-				For cnt2 = 0 to (CInt(arrTagIdx(UBound(arrTagIdx))) - 1)
-					Call hs_arr_append(arrBase, "")
+				For cnt2 = corr_lvl to (CInt(arrTagIdx(UBound(arrTagIdx))) - 1)
+					Call hs_arr_append(arrPrep, "")
 				Next
-
-				Call hs_arr_append(arrBase, thisValue)
-				arrThis = arrBase
+				
+				Call hs_arr_append(arrPrep, thisValue)
+				Call hs_arr_stack(arrPrep, stack_lvl)
+			Else
+				arrPrep = thisValue
 			End If
 		End If
 
-		' Compelete Result appending
-		If cnt1 = 0 Then
-			For cnt2 = 0 to (CInt(arrTagIdx(0)) - 1)
+		'--- Manipulate return array ---------------------------------------------------------------
+		' Method: Snapshot Restoration
+		If UBound(arrSnapObj) >= 0 Then
+			Call hs_arr_append(arrSnapObj, arrPrep) 		'Append prepared value as last Snapshot
+
+			For cnt2 = UBound(arrSnapObj) to 1 Step -1 		'Snapshot Restoration process
+				tarSnapObj = arrSnapObj(cnt2 - 1)
+				tarSnapIdx = arrSnapIdx(cnt2 - 1)
+				arrTmp 	   = tarSnapObj(tarSnapIdx)
+
+				For cnt3 = UBound(arrTmp) to (CInt(arrSnapIdx(cnt2)) - 2)
+					Call hs_arr_append(arrTmp, "")
+				Next
+				Call hs_arr_append(arrTmp, arrSnapObj(cnt2))
+
+				tarSnapObj(tarSnapIdx) = arrTmp
+				arrSnapObj(cnt2 - 1)   = tarSnapObj
+			Next
+
+			arrRet = arrSnapObj(0) 			'Set top level of Snapshot as current Result
+
+		' Method: Direct Appending
+		Else
+			For cnt2 = UBound(arrRet) to (CInt(arrTagIdx(0)) - 2)
 				Call hs_arr_append(arrRet, "")
 			Next
-
-			Call hs_arr_append(arrRet, arrThis)
-			Call hs_arr_stack(arrThis, cnt_level)
-		Else
-			If UBound(arrSnapObj) > -1 Then
-				' New branch was created, arrSnapObj and arrSnapIdx are needed to be prepared first
-				If cnt_level > 0 Then
-					arrTmpSnap = arrSnapObj(UBound(arrSnapObj))(arrSnapIdx(UBound(arrSnapIdx) - 1))
-					Call hs_arr_append(arrTmpSnap, arrThis)
-					Call hs_arr_append(arrSnapObj, arrTmpSnap)
-				End If
-
-				' Complete Result array inside out
-				For cnt2 = UBound(arrSnapObj) to 0 Step -1
-					arrTmpSnap = arrSnapObj(cnt2)
-
-					If cnt2 = UBound(arrSnapObj) Then
-						arrTmpSnap(arrSnapIdx(cnt2)) = arrThis
-					Else
-						arrTmpSnap(arrSnapIdx(cnt2)) = arrSnapObj(cnt2 + 1)
-					End If
-
-					arrSnapObj(cnt2) = arrTmpSnap
-				Next
-
-				' Load Result array which are prepared in 'arrSnapObj' level 0 to 'arrRet'
-				For cnt2 = 0 to UBound(arrSnapObj(0))
-					arrRet(cnt2) = arrSnapObj(0)(cnt2)
-				Next
-			ElseIf UBound(arrTagIdx) = 0 Then
-				Erase arrRet
-				Redim Preserve arrRet(UBound(arrThis))
-				
-				For cnt2 = 0 to UBound(arrRet)
-					arrRet(cnt2) = arrThis(cnt2)
-				Next
-			Else
-				Call hs_arr_stack(arrThis, cnt_level - 1)
-				Call hs_arr_append(arrRet, arrThis)
-			End If
+			Call hs_arr_append(arrRet, arrPrep)
 		End If
 	Next
 
+	'--- Release -----------------------------------------------------------------------------------
 	IBase_create_resParamValue = arrRet
 
-	'*** Error handler *****************************************************************************
 	If Err.Number <> 0 Then
 		Err.Clear
 	End If
