@@ -5,7 +5,8 @@
 ' 2020/09/21, BBS: 	- Updated 'IUser_translate_json_strContent'
 ' 2020/10/07, BBS:	- Updated 'IUser_translate_json_strContent'
 ' 					- Implemented 'IUser_read_json_from_file'
-' 2020/12/11, BBS:	- Updated 'IBase_create_resParamValue'
+' 2020/12/11, BBS:	- Updated 'IBase_create_resParamValue', 'IUser_translate_json_strContent'
+'					- Integrated 'hs_arr_val_exist_ex', 'hs_arr_slice'
 '
 '***************************************************************************************************
 
@@ -13,14 +14,17 @@
 '--- Documentation ---------------------------------------------------------------------------------
 ' (Version 2020/08/23) IUser_get_value_of_param
 ' (Version 2020/08/23) IUser_clean_ParamPath
-' (Version 2020/09/21) IUser_translate_json_strContent
+' (Version 2020/12/11) IUser_translate_json_strContent
 ' (Version 2020/08/27) IUser_translate_resParamValue
 ' (Version 2020/12/11) IBase_create_resParamValue
 ' (Version 2020/08/26) IBase_getinfo_resParamValue
 ' (Version 2020/08/23) IBase_get_value_from_strLine
+' (Version 2020/08/27) hs_read_text_file
 ' (Version 2020/09/19) hs_arr_append
 ' (Version 2020/08/25) hs_arr_stack
-' (Version 2020/08/27) hs_read_text_file
+' (Version 2020/12/11) hs_arr_slice
+' (Version 2020/12/06) hs_arr_val_exist_ex
+' (Version 2020/12/12) hs_parser_remove_redundant_params
 '
 '---------------------------------------------------------------------------------------------------
 
@@ -153,6 +157,7 @@ Function IUser_translate_json_strContent(ByVal strContent)
 	'					2) Parameter path ends with "." for any value that has array value line
 	' 2020/09/21, BBS:	- Bug fixed, Array branching is not closed correctly
 	' 2020/10/07, BBS:	- Bug fixed, Empty parameter is not translated correctly
+	' 2020/12/11, BBS:	- Implemented conditioner before release
 	'
 	'***********************************************************************************************
 	
@@ -365,8 +370,11 @@ Function IUser_translate_json_strContent(ByVal strContent)
 			existValue 	   = IUser_translate_resParamValue(arrValue(cnt1), "")
 			arrValue(cnt1) = existValue
 		End If
-	Next 
+	Next
 
+	'--- Result's Conditioning ---------------------------------------------------------------------
+	Call hs_parser_remove_redundant_params(arrParam, arrValue)
+	
 	'--- Release -----------------------------------------------------------------------------------
 	IUser_translate_json_strContent = Array(arrParam, arrValue)
 
@@ -746,6 +754,47 @@ Function IBase_get_value_from_strLine(ByVal strLine, ByVal chr_sep)
 	End If
 End Function
 
+Function hs_read_text_file(ByVal strPathFile)
+	'*** History ***********************************************************************************
+	' 2020/08/27, BBS:	- First Release
+	'
+	'***********************************************************************************************
+	
+	'*** Documentation *****************************************************************************
+	' 	Return a content exists in the file at 'strPathFile' in String type
+	'
+	'***********************************************************************************************
+
+	On Error Resume Next
+	hs_read_text_file = ""
+
+	'*** Pre-Validation ****************************************************************************
+	strPathFile = CStr(strPathFile)
+	If len(strPathFile) < 1 Then Exit Function
+
+	'*** Initialization ****************************************************************************
+	Dim objFSO, objFile, strContent
+	Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+	'*** Operations ********************************************************************************
+	'--- Validate the existence of target file -----------------------------------------------------
+	If Not objFSO.FileExists(strPathFile) Then Exit Function
+
+	'--- Read target file --------------------------------------------------------------------------
+	Set objFile = objFSO.OpenTextFile(strPathFile, 1)
+	strContent  = objFile.ReadAll()
+
+	'--- Release -----------------------------------------------------------------------------------
+	hs_read_text_file = strContent
+	Set objFile = Nothing
+	Set objFSO  = Nothing
+
+	'*** Error handler *****************************************************************************
+	If Err.Number <> 0 Then
+		Err.Clear
+	End If
+End Function
+
 Function hs_arr_append(ByRef arrInput, ByVal tarValue)
 	'*** History ***********************************************************************************
 	' 2020/08/23, BBS:	- First release
@@ -840,46 +889,246 @@ Function hs_arr_stack(ByRef tarValue, ByVal intLevel)
 	End If
 End Function
 
-Function hs_read_text_file(ByVal strPathFile)
+Function hs_arr_slice(ByVal arrBase, ByVal idxStart, ByVal idxEnd)
 	'*** History ***********************************************************************************
-	' 2020/08/27, BBS:	- First Release
+	' 2020/12/11, BBS:	- First Release
+	'
+	'***********************************************************************************************
+
+	'*** Documentation *****************************************************************************
+	' Array helper, Get sub array of 'arrBase' based on 'idxStart' and 'idxEnd' where both of them
+	' can be provided in negative value which means backward counting
+	' Example, arrBase = {0, 1, 2, 3, 4, 5}
+	'	(idxStart, idxEnd, Result) -> (0, 2, {0, 1, 2}), (3, 7, {3, 4, 5}), (3, 4, {3, 4})
+	'								  (-1, -2, {5, 4}), (-2, -1, {4, 5}), (-2, -4, {4, 3, 2})
+	'
+	' Possible Return Value
+	'	<array> Sub array from 'arrBase'
+	'	<Null>  If 'arrBase' isn't Array or 'idxStart' and 'idxEnd' are both invalid
+	'  
+	'***********************************************************************************************
+
+	On Error Resume Next
+	hs_arr_slice = Empty
+
+	'*** Pre-Validation ****************************************************************************
+	If Not IsArray(arrBase) Then
+		Exit Function
+	End If
+
+	'*** Initialization ****************************************************************************
+	Dim n_size, cnt, thisStep, arrRet, arrIdx(1)
+	n_size 	  = UBound(arrBase)
+	arrIdx(0) = idxStart
+	arrIdx(1) = idxEnd
+
+	'*** Operations ********************************************************************************
+	'--- Conditioning, Indices ---------------------------------------------------------------------
+	For cnt = 0 to UBound(arrIdx)
+		If arrIdx(cnt) < 0 Then
+			If Abs(arrIdx(cnt)) > (1 + n_size) Then
+				arrIdx(cnt) = -1*n_size
+			End If
+
+			arrIdx(cnt) = n_size + arrIdx(cnt) + 1
+		End If
+
+		If arrIdx(cnt) > n_size Then
+			arrIdx(cnt) = n_size
+		End If
+	Next
+
+	'--- Slicing -----------------------------------------------------------------------------------
+	n_size = arrIdx(0) - arrIdx(1)
+	Redim arrRet(Abs(n_size))
+
+	If n_size > 0 Then
+		thisStep = -1
+	Else
+		thisStep = 1
+	End If
+
+	For cnt = arrIdx(0) to arrIdx(1) Step thisStep
+		If IsObject(arrBase(cnt)) Then
+			Set arrRet(Abs(cnt - arrIdx(0))) = arrBase(cnt)
+		Else
+			arrRet(Abs(cnt - arrIdx(0))) = arrBase(cnt)
+		End If
+	Next
+
+	'--- Release -----------------------------------------------------------------------------------
+	hs_arr_slice = arrRet
+
+	If Err.Number <> 0 Then
+		Err.Clear
+	End If
+End Function
+
+Function hs_arr_val_exist_ex(ByVal arrInput, ByVal tarValue, ByVal checkMode, ByVal flg_case)
+	'*** History ***********************************************************************************
+	' 2020/12/06, BBS:	- First Release
 	'
 	'***********************************************************************************************
 	
 	'*** Documentation *****************************************************************************
-	' 	Return a content exists in the file at 'strPathFile' in String type
+	' 	Return an index where 'tarValue' is found in 'arrInput'
+	' 	Multple indices can be returned depends on 'checkMode'
+	'	
+	'	Argument(s)
+	'	<array> arrInput,	Array to be searched
+	'	<str>	tarValue,	Target value in any format but Array, it will be converted to String anyway
+	'	<int>	checkMode,	0: exact match, 1: partial match
+	'	<bool>	flg_case,	False: Case doesn't matter, True: Case does matter
 	'
 	'***********************************************************************************************
-
+	
 	On Error Resume Next
-	hs_read_text_file = ""
+	hs_arr_val_exist_ex = -1
 
 	'*** Pre-Validation ****************************************************************************
-	strPathFile = CStr(strPathFile)
-	If len(strPathFile) < 1 Then Exit Function
+	If Not IsArray(arrInput) Then
+		Exit Function
+	End If
 
 	'*** Initialization ****************************************************************************
-	Dim objFSO, objFile, strContent
-	Set objFSO = CreateObject("Scripting.FileSystemObject")
+	Dim idx, thisStr, flg_append, arrIdx()
+	Redim Preserve arrIdx(0)
+	
+	tarValue = CStr(tarValue)
 
 	'*** Operations ********************************************************************************
-	'--- Validate the existence of target file -----------------------------------------------------
-	If Not objFSO.FileExists(strPathFile) Then Exit Function
+	'--- Conditioning, flg_case --------------------------------------------------------------------
+	If VarType(flg_case) <> 11 Then
+		flg_case = LCase(CStr(flg_case))
+		
+		If flg_case <> "0" and flg_case <> "no" and flg_case <> "false" Then
+			flg_case = True
+		Else
+			flg_case = False
+		End If
+	End If
 
-	'--- Read target file --------------------------------------------------------------------------
-	Set objFile = objFSO.OpenTextFile(strPathFile, 1)
-	strContent  = objFile.ReadAll()
+	If Not flg_case Then
+		tarValue = LCase(tarValue)
+	End If
+
+	'--- Conditioning, checkMode -------------------------------------------------------------------
+	checkMode = CStr(checkMode)
+
+	If IsNumeric(checkMode) Then
+		checkMode = CInt(checkMode)
+	Else
+		checkMode = 0
+	End If
+
+	If checkMode < 0 Then
+		checkMode = 0
+	ElseIf checkMode > 1 Then
+		checkMode = 1
+	End If
+
+	'--- Finding -----------------------------------------------------------------------------------
+	For idx = 0 to UBound(arrInput)
+		If Not IsArray(arrInput(idx)) Then
+			thisStr    = CStr(arrInput(idx))
+			flg_append = 0
+
+			If Not flg_case Then
+				thisStr = LCase(thisStr)
+			End If
+
+			' Case: Exact match
+			If checkMode = 0 and thisStr = tarValue Then
+				flg_append = 1
+
+			' Case: Partial match
+			ElseIf checkMode = 1 and InStr(thisStr, tarValue) > 0 Then
+				flg_append = 1
+			End If
+
+			' Append this index to the result
+			If flg_append > 0 Then
+				If Not (UBound(arrIdx) = 0 and LCase(TypeName(arrIdx(0))) = "empty") Then
+					Redim Preserve arrIdx(UBound(arrIdx) + 1)
+				End If
+
+				arrIdx(UBound(arrIdx)) = idx
+			End If
+		End If
+	Next
 
 	'--- Release -----------------------------------------------------------------------------------
-	hs_read_text_file = strContent
-	Set objFile = Nothing
-	Set objFSO  = Nothing
+	If Not (UBound(arrIdx) = 0 and LCase(TypeName(arrIdx(0))) = "empty") Then
+		If UBound(arrIdx) = 0 Then
+			hs_arr_val_exist_ex = arrIdx(0)
+		Else
+			hs_arr_val_exist_ex = arrIdx
+		End If
+	End If
 
 	'*** Error handler *****************************************************************************
 	If Err.Number <> 0 Then
 		Err.Clear
 	End If
 End Function
+
+Sub hs_parser_remove_redundant_params(ByRef arrOrder, ByRef arrValue)
+	'*** History ***********************************************************************************
+	' 2020/12/12, BBS:	- First Release
+	'
+	'***********************************************************************************************
+	
+	'*** Documentation *****************************************************************************
+	' Parser helper, Remove redundant parameters
+	'
+	'***********************************************************************************************
+	
+	On Error Resume Next
+
+	'*** Pre-Validation ****************************************************************************
+	If Not (IsArray(arrParam) and IsArray(arrValue)) Then
+		Exit Sub
+	End If
+
+	'*** Initialization ****************************************************************************
+	Dim idx1, arrCondParam, arrCondValue, objIdx, flg_val
+
+	'*** Operations ********************************************************************************
+	For idx1 = 0 to UBound(arrOrder)
+		flg_val = False
+
+		If idx1 < UBound(arrOrder) Then
+			objIdx = hs_arr_val_exist_ex(hs_arr_slice(arrOrder, idx1 + 1, -1), arrOrder(idx1), 1, False)
+		Else
+			objIdx = hs_arr_val_exist_ex(hs_arr_slice(arrOrder, -2, 0), arrOrder(idx1), 1, False)
+		End If
+
+		If IsArray(objIdx) Then
+			If UBound(objIdx) = 0 and IsNumeric(CStr(objIdx(0))) Then
+				If CInt(objIdx(0)) < 0 Then
+					flg_val = True
+				End If
+			End If
+		ElseIf IsNumeric(CStr(objIdx)) Then
+			If CInt(objIdx) < 0 Then
+				flg_val = True
+			End If
+		End If
+
+		If flg_val Then
+			Call hs_arr_append(arrCondParam, arrOrder(idx1))
+			Call hs_arr_append(arrCondValue, arrValue(idx1))
+		End If
+	Next
+
+	arrOrder = arrCondParam
+	arrValue = arrCondValue
+
+	'*** Error handler *****************************************************************************
+	If Err.Number <> 0 Then
+		Err.Clear
+	End If
+End Sub
 '***************************************************************************************************
 
 
